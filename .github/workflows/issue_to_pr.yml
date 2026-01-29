@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   run-agent:
@@ -20,6 +21,16 @@ jobs:
         with:
           python-version: "3.11"
 
+      - name: Install deps
+        run: |
+          pip install PyGithub
+
       - name: Run Code Agent
+        env:
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           python code_agent/main.py
