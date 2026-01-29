@@ -1,1 +1,17 @@
+name: Issue to PR skeleton
+
+on:
+  issues:
+    types: [opened]
+
+jobs:
+  test-trigger:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print issue title
+        run: |
+          echo "Issue title: ${{ github.event.issue.title }}"
+          echo "Issue body:"
+          echo "${{ github.event.issue.body }}"
 
