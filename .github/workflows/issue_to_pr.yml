@@ -1,17 +1,25 @@
-name: Issue to PR skeleton
+name: Issue to PR
 
 on:
   issues:
     types: [opened]
 
 jobs:
-  test-trigger:
+  run-agent:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Print issue title
-        run: |
-          echo "Issue title: ${{ github.event.issue.title }}"
-          echo "Issue body:"
-          echo "${{ github.event.issue.body }}"
+      - name: Checkout repo
+        uses: actions/checkout@v4
 
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Run Code Agent
+        env:
+          ISSUE_TITLE: ${{ github.event.issue.title }}
+          ISSUE_BODY: ${{ github.event.issue.body }}
+        run: |
+          python code_agent/main.py
