@@ -1,5 +1,6 @@
 import os
 import json
+import re
 import subprocess
 from pathlib import Path
 from github import Github
@@ -81,8 +82,45 @@ def run_issue_to_pr(
     - Если не уверен что менять, обнови README.md: добавь секцию про запуск агентов/воркфлоу.
     """
 
-    raw = yandexgpt_complete(system=system, user=user, temperature=0.2, max_tokens=1800)
-    patch = json.loads(raw)
+    raw = yandexgpt_complete(system=system, user=user, temperature=0.2, max_tokens=1800).strip()
+    print("LLM raw (first 200 chars):", raw[:200].replace("\n", "\\n"))
+
+    def extract_json(text: str) -> str:
+        # 1) Если уже начинается с { - пробуем как есть
+        if text.lstrip().startswith("{"):
+            return text
+        # 2) Вырезаем первый JSON-объект из текста (если модель добавила пояснения)
+        m = re.search(r"\{.*\}", text, re.DOTALL)
+        if m:
+            return m.group(0)
+        return ""
+
+    json_text = extract_json(raw)
+
+    # Если пусто — пробуем ещё раз с более строгой формулировкой
+    if not json_text:
+        repair_user = f"""
+    Ты вернул ответ не в JSON. Верни ТОЛЬКО валидный JSON без текста вокруг.
+    Формат:
+    {{
+    "summary": "коротко что сделано",
+    "changes": [
+        {{"path": "README.md", "action": "update", "content": "полный текст файла"}}
+    ]
+    }}
+    Задача:
+    TITLE: {issue_title}
+    BODY:
+    {issue_body}
+    """
+        raw2 = yandexgpt_complete(system=system, user=repair_user, temperature=0.2, max_tokens=1800).strip()
+        print("LLM raw2 (first 200 chars):", raw2[:200].replace("\n", "\\n"))
+        json_text = extract_json(raw2)
+
+    if not json_text:
+        raise RuntimeError("LLM did not return JSON. See logs for raw output.")
+
+    patch = json.loads(json_text)
 
     summary = patch.get("summary", "").strip()
     changes = patch.get("changes", [])

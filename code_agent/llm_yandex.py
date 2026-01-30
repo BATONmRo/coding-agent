@@ -10,9 +10,13 @@ YANDEX_ENDPOINT = "https://llm.api.cloud.yandex.net/foundationModels/v1/completi
 def _post_json(url: str, headers: Dict[str, str], payload: Dict[str, Any], timeout: int = 60) -> Dict[str, Any]:
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        raw = resp.read().decode("utf-8")
-    return json.loads(raw)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8")
+        return json.loads(raw)
+    except urllib.error.HTTPError as e:
+        body = e.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"YandexGPT HTTPError {e.code}: {body}") from e
 
 
 def yandexgpt_complete(
