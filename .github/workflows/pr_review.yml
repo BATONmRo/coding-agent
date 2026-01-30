@@ -1,12 +1,6 @@
 name: PR Review
 
 on:
-  workflow_dispatch:
-    inputs:
-      pr_number:
-        description: "PR number to review"
-        required: true
-        type: string
   pull_request:
     types: [opened, synchronize, reopened]
   pull_request_target:
@@ -20,7 +14,6 @@ jobs:
   ai-review:
     runs-on: ubuntu-latest
     if: |
-      github.event_name == 'workflow_dispatch' ||
       github.event_name == 'pull_request' ||
       (github.event_name == 'pull_request_target' && github.event.label.name == 'ai-review-requested')
 
@@ -42,6 +35,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           python -u reviewer_agent/review.py
