@@ -80,6 +80,16 @@ def run_issue_to_pr(
     - Если меняешь файл, возвращай полный новый content (не diff).
     - Делай минимальные изменения.
     - Если не уверен что менять, обнови README.md: добавь секцию про запуск агентов/воркфлоу.
+    Правила (строго):
+    - Запрещено использовать заглушки: "…", "...", "TODO", "TBD", "<...>", "[...]" и любые плейсхолдеры.
+    - Все инструкции должны быть конкретными командами/действиями.
+    - Если правишь README.md, то ОБЯЗАТЕЛЬНО добавь секции:
+    1) "Как это работает"
+    2) "Workflows" (перечисли issue_to_pr.yml, pr_review.yml, pr_fix.yml и их триггеры)
+    3) "Secrets" (GH_PAT, YANDEX_IAM_TOKEN, YANDEX_FOLDER_ID, YANDEX_MODEL)
+    4) "Локальный запуск" (команды pip install и python -m code_agent.cli run)
+    5) "Как проверить" (пошагово Issue → PR → Review)
+    - README должен быть самодостаточным: человек без контекста должен понять как запустить и проверить.
     """
 
     raw = yandexgpt_complete(system=system, user=user, temperature=0.2, max_tokens=1800).strip()
@@ -121,6 +131,39 @@ def run_issue_to_pr(
         raise RuntimeError("LLM did not return JSON. See logs for raw output.")
 
     patch = json.loads(json_text)
+
+    def contains_placeholders(s: str) -> bool:
+        bad = ["...", "…", "TODO", "TBD", "<...>", "[...]"]
+        s_up = s.upper()
+        return any(b in s for b in bad) or any(b in s_up for b in ["TODO", "TBD"])
+
+    # проверяем все create/update content
+    bad_files = []
+    for ch in patch.get("changes", []):
+        if ch.get("action") in ("create", "update"):
+            content = ch.get("content", "")
+            if contains_placeholders(content):
+                bad_files.append(ch.get("path", "unknown"))
+
+    if bad_files:
+        # повторный запрос: "перепиши без заглушек"
+        repair_user = f"""
+    Ты вернул заглушки в файлах: {bad_files}.
+    Нужно переписать контент БЕЗ плейсхолдеров ("...", "…", "TODO", "TBD", "<...>", "[...]").
+
+    Верни ТОЛЬКО валидный JSON формата:
+    {{"summary": "...", "changes":[{{"path":"...", "action":"update|create|delete", "content":"..."}}]}}
+
+    Задача:
+    TITLE: {issue_title}
+    BODY:
+    {issue_body}
+    """
+        raw3 = yandexgpt_complete(system=system, user=repair_user, temperature=0.2, max_tokens=2200).strip()
+        json_text3 = extract_json(raw3)
+        if not json_text3:
+            raise RuntimeError("LLM retry did not return JSON")
+        patch = json.loads(json_text3)
 
     summary = patch.get("summary", "").strip()
     changes = patch.get("changes", [])
