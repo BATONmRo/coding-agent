@@ -28,6 +28,8 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--issue-title", dest="issue_title", default="", help="Issue title")
     run.add_argument("--issue-body", dest="issue_body", default="", help="Issue body")
 
+    run.add_argument("--pr", dest="pr_number", help="Pull request number for iteration mode")
+
     run.add_argument(
         "--git-token",
         dest="git_token",
@@ -60,6 +62,8 @@ def main(argv: list[str] | None = None) -> int:
         if not api_token:
             raise SystemExit("Missing api token: provide --api-token or set GH_API_TOKEN/GITHUB_TOKEN")
 
+        pr_number = args.pr_number or os.environ.get("PR_NUMBER", "")
+
         run_issue_to_pr(
             issue_number=issue_number,
             repo_name=repo_name,
@@ -68,6 +72,7 @@ def main(argv: list[str] | None = None) -> int:
             base_branch=base_branch,
             issue_title=issue_title,
             issue_body=issue_body,
+            pr_number=pr_number,
         )
         return 0
 

@@ -2,6 +2,8 @@ import os
 import json
 import re
 import subprocess
+import re
+from typing import List, Tuple, Optional
 from pathlib import Path
 from github import Github
 from code_agent.llm_yandex import yandexgpt_complete
@@ -29,6 +31,65 @@ def get_existing_pr(repo, head_full: str, base: str = "main"):
             return pr
     return None
 
+def extract_json(text: str) -> str:
+    text = (text or "").strip()
+    if text.startswith("{"):
+        return text
+    m = re.search(r"\{.*\}", text, re.DOTALL)
+    return m.group(0) if m else ""
+
+
+def get_last_reviewer_comment(pr) -> str:
+    """
+    Берём последний комментарий бота github-actions со словами 'AI Reviewer report' (если есть).
+    """
+    comments = list(pr.get_issue_comments())
+    comments.reverse()
+    for c in comments:
+        body = c.body or ""
+        if c.user and c.user.login == "github-actions[bot]" and "AI Reviewer report" in body:
+            return body
+    return ""
+
+
+def get_ci_failures(repo, pr) -> List[Tuple[str, str]]:
+    """
+    Возвращает список (check_name, details_text) только для упавших checks на последнем коммите PR.
+    """
+    commits = list(pr.get_commits())
+    if not commits:
+        return []
+    last_sha = commits[-1].sha
+    commit = repo.get_commit(last_sha)
+
+    failures: List[Tuple[str, str]] = []
+    try:
+        check_runs = list(commit.get_check_runs())
+    except Exception:
+        check_runs = []
+
+    for cr in check_runs:
+        # conclusion может быть failure/cancelled/success
+        conclusion = getattr(cr, "conclusion", None) or cr.raw_data.get("conclusion")
+        name = getattr(cr, "name", None) or cr.raw_data.get("name") or "unknown-check"
+
+        if conclusion in ("failure", "cancelled", "timed_out", "action_required"):
+            out = cr.raw_data.get("output", {}) if hasattr(cr, "raw_data") else {}
+            title = out.get("title") or ""
+            summary = out.get("summary") or ""
+            text = out.get("text") or ""
+            details = "\n".join([title, summary, text]).strip()
+
+            # ограничим размер, чтобы не спалить токены
+            if len(details) > 4000:
+                details = details[:4000] + "\n...(truncated)..."
+
+            if not details:
+                details = f"{name} failed (no output text available)."
+
+            failures.append((name, details))
+
+    return failures
 
 def run_issue_to_pr(
     *,
@@ -39,6 +100,7 @@ def run_issue_to_pr(
     base_branch: str = "main",
     issue_title: str = "",
     issue_body: str = "",
+    pr_number: str = "",
 ):
     """
     Главная бизнес-логика code-agent:
@@ -50,50 +112,78 @@ def run_issue_to_pr(
     gh = Github(api_token)
     repo = gh.get_repo(repo_name)
 
-    ensure_label(repo, LABEL_REVIEW_REQUESTED, "cfd3d7")
-    ensure_label(repo, LABEL_CHANGES_REQUESTED, "fbca04")
-    ensure_label(repo, LABEL_APPROVED, "0e8a16")
-
+    # --- ITERATION MODE: если пришли из PR Fix, у нас есть PR_NUMBER ---
+    pr = None
     branch = f"agent/issue-{issue_number}"
 
+    if pr_number:
+        pr = repo.get_pull(int(pr_number))
+        branch = pr.head.ref  # ветка PR
+        issue_title = issue_title or pr.title or ""
+        issue_body = issue_body or (pr.body or "")
+
+    # checkout нужной ветки
     run(f"git checkout -B {branch}")
 
-    # --- LLM: просим вернуть JSON с патчем ---
-    system = "Ты агент-разработчик. Возвращай только валидный JSON без пояснений."
+    reviewer_comment = ""
+    ci_failures = []
+
+    if pr is not None:
+        reviewer_comment = get_last_reviewer_comment(pr)
+        ci_failures = get_ci_failures(repo, pr)
+
+    ci_block = ""
+    if ci_failures:
+        parts = []
+        for name, details in ci_failures:
+            parts.append(f"## CHECK FAILED: {name}\n{details}")
+        ci_block = "\n\n".join(parts)
+
+    system = "Ты агент-разработчик. Верни только валидный JSON без пояснений."
+
     user = f"""
-    Задача (Issue):
+    Задача (Issue/PR контекст):
     TITLE: {issue_title}
+
     BODY:
     {issue_body}
 
-    Сгенерируй изменения для репозитория.
+    Замечания ревьюера (если есть):
+    {reviewer_comment}
+
+    Ошибки CI (если есть):
+    {ci_block}
+
+    Сгенерируй изменения, чтобы:
+    - выполнить требования задачи
+    - исправить замечания ревьюера
+    - сделать CI зелёным (ruff/black/mypy/pytest)
+
     Верни JSON строго в формате:
     {{
-    "summary": "коротко что сделано",
+    "summary": "что сделано (1-3 предложения)",
     "changes": [
-        {{"path": "путь/к/файлу", "action": "create|update|delete", "content": "текст файла (для create/update)"}}
+        {{"path":"...", "action":"create|update|delete", "content":"полный новый контент файла для create/update"}}
     ]
     }}
 
     Правила (строго):
-    - Запрещено использовать заглушки: "...", "…", "TODO", "TBD", "<...>", "[...]".
     - Никакого текста вне JSON.
-    - Если изменяешь README.md:
-    - переписывай файл ЦЕЛИКОМ
-    - минимальный размер README — 30 строк
-    - README должен быть самодостаточным
-    - README ОБЯЗАН содержать:
-    1) Описание проекта
-    2) Как работает агент (Issue → PR → Review → Iteration)
-    3) Список workflow с названиями файлов и триггерами
-    4) Secrets и зачем они нужны
-    5) Локальный запуск (pip install, python -m code_agent.cli run)
-    6) Как проверить работу (пошагово)
-    - Пиши конкретные команды и шаги, не описания в общем виде.
+    - Запрещено использовать заглушки: "...", "…", "TODO", "TBD", "<...>", "[...]".
+    - Не меняй README.md, если задача явно не про документацию.
+    - Если CI упал — приоритет исправить CI.
     """
 
-    raw = yandexgpt_complete(system=system, user=user, temperature=0.2, max_tokens=1800).strip()
-    print("LLM raw (first 200 chars):", raw[:200].replace("\n", "\\n"))
+    raw = yandexgpt_complete(system=system, user=user, temperature=0.2, max_tokens=2200)
+    json_text = extract_json(raw)
+    if not json_text:
+        raise RuntimeError(f"LLM did not return JSON. Raw (first 200): {raw[:200]!r}")
+
+    patch = json.loads(json_text)
+    summary = (patch.get("summary") or "").strip()
+    changes = patch.get("changes") or []
+    if not changes:
+        raise RuntimeError("LLM returned no changes")
 
     def extract_json(text: str) -> str:
         # 1) Если уже начинается с { - пробуем как есть

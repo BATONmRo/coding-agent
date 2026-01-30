@@ -40,6 +40,7 @@ jobs:
           YANDEX_FOLDER_ID: ${{ secrets.YANDEX_FOLDER_ID }}
           YANDEX_MODEL: yandexgpt-lite
           GITHUB_REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
           ISSUE_TITLE: "Iteration for PR #${{ github.event.pull_request.number }}"
           ISSUE_BODY: "Reviewer requested changes. See PR comments."
         run: |
