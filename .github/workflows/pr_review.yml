@@ -3,6 +3,8 @@ name: PR Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  pull_request_target:
+    types: [labeled]
 
 permissions:
   contents: read
@@ -11,8 +13,12 @@ permissions:
 jobs:
   ai-review:
     runs-on: ubuntu-latest
+    if: |
+      github.event_name == 'pull_request' ||
+      (github.event_name == 'pull_request_target' && github.event.label.name == 'ai-review-requested')
+
     steps:
-      - name: Checkout repo (optional)
+      - name: Checkout repo
         uses: actions/checkout@v4
 
       - name: Set up Python
