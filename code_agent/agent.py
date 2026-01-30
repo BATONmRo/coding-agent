@@ -12,15 +12,6 @@ LABEL_REVIEW_REQUESTED = "ai-review-requested"
 LABEL_CHANGES_REQUESTED = "ai-changes-requested"
 LABEL_APPROVED = "ai-approved"
 
-def extract_json(text: str) -> str:
-        # 1) Если уже начинается с { - пробуем как есть
-        if text.lstrip().startswith("{"):
-            return text
-        # 2) Вырезаем первый JSON-объект из текста (если модель добавила пояснения)
-        m = re.search(r"\{.*\}", text, re.DOTALL)
-        if m:
-            return m.group(0)
-        return ""
 
 def run(cmd: str):
     print(f"> {cmd}")
@@ -193,33 +184,7 @@ def run_issue_to_pr(
     changes = patch.get("changes") or []
     if not changes:
         raise RuntimeError("LLM returned no changes")
-
-    json_text = extract_json(raw)
-
-    # Если пусто — пробуем ещё раз с более строгой формулировкой
-    if not json_text:
-        repair_user = f"""
-    Ты вернул ответ не в JSON. Верни ТОЛЬКО валидный JSON без текста вокруг.
-    Формат:
-    {{
-    "summary": "коротко что сделано",
-    "changes": [
-        {{"path": "README.md", "action": "update", "content": "полный текст файла"}}
-    ]
-    }}
-    Задача:
-    TITLE: {issue_title}
-    BODY:
-    {issue_body}
-    """
-        raw2 = yandexgpt_complete(system=system, user=repair_user, temperature=0.2, max_tokens=1800).strip()
-        print("LLM raw2 (first 200 chars):", raw2[:200].replace("\n", "\\n"))
-        json_text = extract_json(raw2)
-
-    if not json_text:
-        raise RuntimeError("LLM did not return JSON. See logs for raw output.")
-
-    patch = json.loads(json_text)
+    
 
     def contains_placeholders(s: str) -> bool:
         bad = ["...", "…", "TODO", "TBD", "<...>", "[...]"]
@@ -300,8 +265,12 @@ def run_issue_to_pr(
     pr_body = (
         f"Automated PR for issue #{issue_number}\n\n"
         f"### Issue title\n{issue_title}\n\n"
-        f"### Issue body\n{issue_body}\n"
-        f"### Agent summary\n{summary}\n"
+        f"### Issue body\n{issue_body}\n\n"
+        f"### Agent summary\n{summary}\n\n"
+        f"### How to verify\n"
+        f"- Открой PR и убедись, что CI зелёный (ruff/black/mypy/pytest).\n"
+        f"- Посмотри вкладку Files changed и проверь, что правки соответствуют Issue.\n"
+        f"- Локально (опционально): `pytest -q`.\n"
     )
 
     owner = repo_name.split("/")[0]
@@ -320,12 +289,20 @@ def run_issue_to_pr(
         pr.edit(body=pr_body)
         print("PR already exists:", pr.html_url)
 
-    existing = {l.name for l in pr.get_labels()}
-    if LABEL_CHANGES_REQUESTED in existing:
+        # --- labels: после любых изменений всегда запрашиваем новое ревью ---
+    labels_now = {l.name for l in pr.get_labels()}
+
+    # если были запрошены изменения — мы сделали новую попытку
+    if LABEL_CHANGES_REQUESTED in labels_now:
         pr.remove_from_labels(LABEL_CHANGES_REQUESTED)
-    if LABEL_APPROVED in existing:
+
+    # если вдруг был approved — новая попытка отменяет approved
+    if LABEL_APPROVED in labels_now:
         pr.remove_from_labels(LABEL_APPROVED)
-    if LABEL_REVIEW_REQUESTED not in existing:
+
+    # пересчитываем после removals
+    labels_now = {l.name for l in pr.get_labels()}
+    if LABEL_REVIEW_REQUESTED not in labels_now:
         pr.add_to_labels(LABEL_REVIEW_REQUESTED)
 
     pr.create_issue_comment(

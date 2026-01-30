@@ -41,7 +41,8 @@ def pr_body_has_sections(pr_body: str) -> bool:
 def get_ci_status(repo, pr):
     """
     Возвращает (is_green, details_list)
-    details_list — список строк по неуспешным checks.
+    details_list — список строк по неуспешным статусам CI.
+    Используем combined status — он совпадает с тем, что видно в GitHub UI.
     """
     commits = list(pr.get_commits())
     if not commits:
@@ -50,26 +51,20 @@ def get_ci_status(repo, pr):
     last_sha = commits[-1].sha
     commit = repo.get_commit(last_sha)
 
-    # В PyGithub есть get_check_runs (GitHub Checks API)
-    try:
-        check_runs = list(commit.get_check_runs())
-    except Exception:
-        check_runs = []
+    combined = commit.get_combined_status()
+    state = getattr(combined, "state", None) or combined.raw_data.get("state")
 
-    failures = []
-    for cr in check_runs:
-        conclusion = getattr(cr, "conclusion", None) or cr.raw_data.get("conclusion")
-        name = getattr(cr, "name", None) or cr.raw_data.get("name") or "unknown-check"
+    # success / failure / pending / error
+    if state != "success":
+        details = [f"combined status: {state}"]
+        for s in combined.statuses:
+            st = getattr(s, "state", None) or s.raw_data.get("state")
+            if st != "success":
+                ctx = getattr(s, "context", None) or s.raw_data.get("context") or "unknown"
+                details.append(f"{ctx}: {st}")
+        return False, details
 
-        # neutral = не провал и не успех (например skipped)
-        if conclusion in ("failure", "cancelled", "timed_out", "action_required"):
-            failures.append(f"{name}: {conclusion}")
-
-    # Если нет check_runs вообще — считаем что CI неизвестен => changes
-    if not check_runs:
-        return False, ["CI checks не найдены (check-runs пустые)."]
-
-    return (len(failures) == 0), failures
+    return True, []
 
 
 def main():
