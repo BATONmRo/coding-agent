@@ -27,6 +27,51 @@ def remove_label(pr, name: str):
         pr.remove_from_labels(name)
 
 
+def pr_body_has_sections(pr_body: str) -> bool:
+    """
+    Проверяем наличие секций "Agent summary" и "How to verify" в теле PR.
+    Допускаем разные регистры и заголовки Markdown.
+    """
+    text = (pr_body or "").lower()
+    has_summary = "agent summary" in text
+    has_verify = "how to verify" in text
+    return has_summary and has_verify
+
+
+def get_ci_status(repo, pr):
+    """
+    Возвращает (is_green, details_list)
+    details_list — список строк по неуспешным checks.
+    """
+    commits = list(pr.get_commits())
+    if not commits:
+        return False, ["Нет коммитов в PR — CI проверить невозможно."]
+
+    last_sha = commits[-1].sha
+    commit = repo.get_commit(last_sha)
+
+    # В PyGithub есть get_check_runs (GitHub Checks API)
+    try:
+        check_runs = list(commit.get_check_runs())
+    except Exception:
+        check_runs = []
+
+    failures = []
+    for cr in check_runs:
+        conclusion = getattr(cr, "conclusion", None) or cr.raw_data.get("conclusion")
+        name = getattr(cr, "name", None) or cr.raw_data.get("name") or "unknown-check"
+
+        # neutral = не провал и не успех (например skipped)
+        if conclusion in ("failure", "cancelled", "timed_out", "action_required"):
+            failures.append(f"{name}: {conclusion}")
+
+    # Если нет check_runs вообще — считаем что CI неизвестен => changes
+    if not check_runs:
+        return False, ["CI checks не найдены (check-runs пустые)."]
+
+    return (len(failures) == 0), failures
+
+
 def main():
     token = os.environ["GITHUB_TOKEN"]
     repo_name = os.environ["GITHUB_REPOSITORY"]
@@ -42,30 +87,35 @@ def main():
     ensure_label(repo, LABEL_APPROVED, "0e8a16")
 
     files = list(pr.get_files())
+    pr_body = pr.body or ""
 
-    # Простое “ревью” для MVP:
-    # 1) Если нет файлов — просим изменения
-    # 2) Если изменены только agent_was_here...txt — считаем ок
-    # 3) Иначе просим добавить описание/README (как пример требования)
+    # 0) CI обязателен: если CI не зелёный — changes
+    ci_green, ci_details = get_ci_status(repo, pr)
+
+    notes = []
+    verdict = "changes"
+
+    # 1) Если PR пустой — changes
     if len(files) == 0:
         verdict = "changes"
-        notes = ["В PR нет изменённых файлов. Похоже, агент ничего не сделал — нужно добавить изменения."]
-    else:
-        changed_paths = [f.filename for f in files]
-        only_markers = all(p.startswith("agent_was_here") and p.endswith(".txt") for p in changed_paths)
+        notes.append("В PR нет изменённых файлов. Похоже, агент ничего не сделал — нужны изменения в коде.")
 
-        if only_markers:
+    # 2) Если CI не зелёный — changes (даже если есть summary)
+    elif not ci_green:
+        verdict = "changes"
+        notes.append("CI не зелёный — сначала нужно починить проверки.")
+        for d in ci_details:
+            notes.append(f"CI fail: {d}")
+
+    # 3) CI зелёный: проверяем наличие summary/how-to-verify
+    else:
+        if pr_body_has_sections(pr_body):
             verdict = "approved"
-            notes = [
-                "Изменения выглядят как маркер/проверка работы пайплайна — ок для MVP.",
-                "Следующий шаг по ТЗ: агент должен изменять реальный код/файлы согласно Issue и добавлять summary."
-            ]
+            notes.append("CI зелёный и в PR body есть секции `Agent summary` и `How to verify` — можно принимать.")
         else:
             verdict = "changes"
-            notes = [
-                "Вижу изменения не только маркерных файлов.",
-                "Пожалуйста добавь в PR summary: что сделано и как проверить (в README или в описании PR)."
-            ]
+            notes.append("CI зелёный, но не вижу в PR body секции `Agent summary` и `How to verify`.")
+            notes.append("Добавь краткое описание: что сделано и как проверить (в PR description).")
 
     # Пишем комментарий в PR
     body_lines = [
