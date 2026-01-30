@@ -90,6 +90,7 @@ def run_issue_to_pr(
     5) Локальный запуск (pip install, python -m code_agent.cli run)
     6) Как проверить работу (пошагово)
     - Пиши конкретные команды и шаги, не описания в общем виде.
+    """
 
     raw = yandexgpt_complete(system=system, user=user, temperature=0.2, max_tokens=1800).strip()
     print("LLM raw (first 200 chars):", raw[:200].replace("\n", "\\n"))
