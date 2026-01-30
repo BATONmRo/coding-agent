@@ -1,0 +1,42 @@
+name: PR Fix (Code Agent Iteration)
+
+on:
+  pull_request_target:
+    types: [labeled]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'ai-changes-requested'
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install PyGithub
+
+      - name: Run Code Agent (iteration)
+        env:
+          ISSUE_NUMBER: ${{ github.event.pull_request.title }}
+          # Мы пока не вытаскиваем issue id из PR корректно — это следующий шаг.
+          # На этом этапе важнее построить цикл.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ISSUE_TITLE: "Iteration for PR #${{ github.event.pull_request.number }}"
+          ISSUE_BODY: "Reviewer requested changes. See PR comments."
+        run: |
+          python -u code_agent/main.py
