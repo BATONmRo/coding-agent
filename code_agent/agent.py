@@ -12,6 +12,15 @@ LABEL_REVIEW_REQUESTED = "ai-review-requested"
 LABEL_CHANGES_REQUESTED = "ai-changes-requested"
 LABEL_APPROVED = "ai-approved"
 
+def extract_json(text: str) -> str:
+        # 1) Если уже начинается с { - пробуем как есть
+        if text.lstrip().startswith("{"):
+            return text
+        # 2) Вырезаем первый JSON-объект из текста (если модель добавила пояснения)
+        m = re.search(r"\{.*\}", text, re.DOTALL)
+        if m:
+            return m.group(0)
+        return ""
 
 def run(cmd: str):
     print(f"> {cmd}")
@@ -184,16 +193,6 @@ def run_issue_to_pr(
     changes = patch.get("changes") or []
     if not changes:
         raise RuntimeError("LLM returned no changes")
-
-    def extract_json(text: str) -> str:
-        # 1) Если уже начинается с { - пробуем как есть
-        if text.lstrip().startswith("{"):
-            return text
-        # 2) Вырезаем первый JSON-объект из текста (если модель добавила пояснения)
-        m = re.search(r"\{.*\}", text, re.DOTALL)
-        if m:
-            return m.group(0)
-        return ""
 
     json_text = extract_json(raw)
 
