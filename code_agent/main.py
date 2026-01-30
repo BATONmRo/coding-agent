@@ -34,12 +34,14 @@ def get_existing_pr(repo, head_full: str, base: str = "main"):
 def main():
     issue_number = os.environ["ISSUE_NUMBER"]
     repo_name = os.environ["GITHUB_REPOSITORY"]
-    token = os.environ["GITHUB_TOKEN"]
+
+    git_token = os.environ["GITHUB_TOKEN"]
+    api_token = os.environ.get("GH_API_TOKEN", git_token)
 
     issue_title = os.environ.get("ISSUE_TITLE", "")
     issue_body = os.environ.get("ISSUE_BODY", "")
 
-    gh = Github(token)
+    gh = Github(api_token)
     repo = gh.get_repo(repo_name)
 
     ensure_label(repo, LABEL_REVIEW_REQUESTED, "cfd3d7")
