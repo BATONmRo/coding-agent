@@ -1,8 +1,9 @@
 import os
+import json
 import subprocess
 from pathlib import Path
 from github import Github
-
+from code_agent.llm_yandex import yandexgpt_complete
 
 LABEL_REVIEW_REQUESTED = "ai-review-requested"
 LABEL_CHANGES_REQUESTED = "ai-changes-requested"
@@ -56,18 +57,60 @@ def run_issue_to_pr(
 
     run(f"git checkout -B {branch}")
 
-    marker_path = Path(f"agent_was_here_issue_{issue_number}.txt")
-    marker_path.write_text(
-        "Hello from agent!\n"
-        f"Issue #{issue_number}\n"
-        f"Title: {issue_title}\n"
-        f"Body:\n{issue_body}\n"
-    )
+    # --- LLM: просим вернуть JSON с патчем ---
+    system = "Ты агент-разработчик. Возвращай только валидный JSON без пояснений."
+    user = f"""
+    Задача (Issue):
+    TITLE: {issue_title}
+    BODY:
+    {issue_body}
+
+    Сгенерируй изменения для репозитория.
+    Верни JSON строго в формате:
+    {{
+    "summary": "коротко что сделано",
+    "changes": [
+        {{"path": "путь/к/файлу", "action": "create|update|delete", "content": "текст файла (для create/update)"}}
+    ]
+    }}
+
+    Правила:
+    - Никакого текста вне JSON.
+    - Если меняешь файл, возвращай полный новый content (не diff).
+    - Делай минимальные изменения.
+    - Если не уверен что менять, обнови README.md: добавь секцию про запуск агентов/воркфлоу.
+    """
+
+    raw = yandexgpt_complete(system=system, user=user, temperature=0.2, max_tokens=1800)
+    patch = json.loads(raw)
+
+    summary = patch.get("summary", "").strip()
+    changes = patch.get("changes", [])
+    if not isinstance(changes, list) or not changes:
+        raise RuntimeError(f"LLM returned no changes. Raw: {raw}")
+
+    # --- применяем изменения ---
+    for ch in changes:
+        path = ch["path"]
+        action = ch["action"]
+        p = Path(path)
+
+        if action == "delete":
+            if p.exists():
+                p.unlink()
+            continue
+
+        content = ch.get("content")
+        if content is None:
+            raise RuntimeError(f"Missing content for {action} {path}")
+
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
 
     run("git config user.name 'code-agent'")
     run("git config user.email 'code-agent@users.noreply.github.com'")
 
-    run(f"git add {marker_path.as_posix()}")
+    run("git add -A")
 
     # Если изменений нет — не коммитим
     try:
@@ -88,6 +131,7 @@ def run_issue_to_pr(
         f"Automated PR for issue #{issue_number}\n\n"
         f"### Issue title\n{issue_title}\n\n"
         f"### Issue body\n{issue_body}\n"
+        f"### Agent summary\n{summary}\n"
     )
 
     owner = repo_name.split("/")[0]

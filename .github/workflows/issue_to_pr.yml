@@ -36,6 +36,9 @@ jobs:
           ISSUE_BODY: ${{ github.event.issue.body }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_API_TOKEN: ${{ secrets.GH_PAT }}
+          YANDEX_IAM_TOKEN: ${{ secrets.YANDEX_IAM_TOKEN }}
+          YANDEX_FOLDER_ID: ${{ secrets.YANDEX_FOLDER_ID }}
+          YANDEX_MODEL: yandexgpt-lite
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           python -u -m code_agent.cli run

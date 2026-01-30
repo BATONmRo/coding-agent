@@ -36,6 +36,9 @@ jobs:
           # На этом этапе важнее построить цикл.
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_API_TOKEN: ${{ secrets.GH_PAT }}
+          YANDEX_IAM_TOKEN: ${{ secrets.YANDEX_IAM_TOKEN }}
+          YANDEX_FOLDER_ID: ${{ secrets.YANDEX_FOLDER_ID }}
+          YANDEX_MODEL: yandexgpt-lite
           GITHUB_REPOSITORY: ${{ github.repository }}
           ISSUE_TITLE: "Iteration for PR #${{ github.event.pull_request.number }}"
           ISSUE_BODY: "Reviewer requested changes. See PR comments."
