@@ -40,4 +40,4 @@ jobs:
           ISSUE_TITLE: "Iteration for PR #${{ github.event.pull_request.number }}"
           ISSUE_BODY: "Reviewer requested changes. See PR comments."
         run: |
-          python -u code_agent/main.py
+          python -u -m code_agent.cli run
