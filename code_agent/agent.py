@@ -1,12 +1,10 @@
-import os
 import json
 import re
 import subprocess
-import re
-from typing import List, Tuple, Optional
 from pathlib import Path
+from typing import List, Tuple
 from github import Github
-from code_agent.llm_yandex import yandexgpt_complete
+from code_agent.llm_client import yandexgpt_complete
 
 LABEL_REVIEW_REQUESTED = "ai-review-requested"
 LABEL_CHANGES_REQUESTED = "ai-changes-requested"
@@ -31,12 +29,38 @@ def get_existing_pr(repo, head_full: str, base: str = "main"):
             return pr
     return None
 
+
+def is_safe_relative_path(path: str) -> bool:
+    p = Path(path)
+    return not p.is_absolute() and ".." not in p.parts
+
+
+ALLOWED_ACTIONS = {"create", "update", "delete"}
+
+
 def extract_json(text: str) -> str:
     text = (text or "").strip()
-    if text.startswith("{"):
+    if not text:
+        return ""
+
+    if text.startswith("{") and text.endswith("}"):
         return text
-    m = re.search(r"\{.*\}", text, re.DOTALL)
-    return m.group(0) if m else ""
+
+    start = text.find("{")
+    if start == -1:
+        return ""
+
+    depth = 0
+    for index in range(start, len(text)):
+        char = text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start:index + 1]
+
+    return ""
 
 
 def get_last_reviewer_comment(pr) -> str:
@@ -112,6 +136,10 @@ def run_issue_to_pr(
     gh = Github(api_token)
     repo = gh.get_repo(repo_name)
 
+    ensure_label(repo, LABEL_REVIEW_REQUESTED, "cfd3d7")
+    ensure_label(repo, LABEL_CHANGES_REQUESTED, "fbca04")
+    ensure_label(repo, LABEL_APPROVED, "0e8a16")
+
     # --- ITERATION MODE: если пришли из PR Fix, у нас есть PR_NUMBER ---
     pr = None
     branch = f"agent/issue-{issue_number}"
@@ -123,6 +151,8 @@ def run_issue_to_pr(
         issue_body = issue_body or (pr.body or "")
 
     # checkout нужной ветки
+    run(f"git checkout {base_branch}")
+    run(f"git pull origin {base_branch}")
     run(f"git checkout -B {branch}")
 
     reviewer_comment = ""
@@ -194,10 +224,19 @@ def run_issue_to_pr(
     # проверяем все create/update content
     bad_files = []
     for ch in patch.get("changes", []):
-        if ch.get("action") in ("create", "update"):
+        action = ch.get("action")
+        path = ch.get("path", "unknown")
+
+        if action not in ALLOWED_ACTIONS:
+            raise RuntimeError(f"Unsupported action from LLM: {action}")
+
+        if not is_safe_relative_path(path):
+            raise RuntimeError(f"Unsafe path from LLM: {path}")
+
+        if action in ("create", "update"):
             content = ch.get("content", "")
             if contains_placeholders(content):
-                bad_files.append(ch.get("path", "unknown"))
+                bad_files.append(path)
 
     if bad_files:
         # повторный запрос: "перепиши без заглушек"
@@ -228,6 +267,12 @@ def run_issue_to_pr(
     for ch in changes:
         path = ch["path"]
         action = ch["action"]
+
+        if action not in ALLOWED_ACTIONS:
+            raise RuntimeError(f"Unsupported action from LLM: {action}")
+        if not is_safe_relative_path(path):
+            raise RuntimeError(f"Unsafe path from LLM: {path}")
+
         p = Path(path)
 
         if action == "delete":
@@ -238,6 +283,8 @@ def run_issue_to_pr(
         content = ch.get("content")
         if content is None:
             raise RuntimeError(f"Missing content for {action} {path}")
+        if contains_placeholders(content):
+            raise RuntimeError(f"Refusing to write placeholder content for {path}")
 
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
@@ -247,12 +294,8 @@ def run_issue_to_pr(
 
     run("git add -A")
 
-    # Если изменений нет — не коммитим
-    try:
-        run("git diff --cached --quiet || echo 'has_changes=1' > /tmp/has_changes")
-        has_changes = Path("/tmp/has_changes").exists()
-    except Exception:
-        has_changes = True
+    result = subprocess.run("git diff --cached --quiet", shell=True)
+    has_changes = result.returncode != 0
 
     if not has_changes:
         print("No staged changes. Exiting without commit/push.")
