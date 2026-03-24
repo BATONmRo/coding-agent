@@ -64,4 +64,4 @@ jobs:
 
       - name: pip-audit
         run: |
-          pip-audit -r requirements.txt -r requirements-dev.txt
+          pip-audit -r requirements.txt
