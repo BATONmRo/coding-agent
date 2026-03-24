@@ -16,13 +16,13 @@ def ensure_label(repo, name: str, color: str = "ededed"):
 
 
 def add_label(pr, name: str):
-    existing = {l.name for l in pr.get_labels()}
+    existing = {label.name for label in pr.get_labels()}
     if name not in existing:
         pr.add_to_labels(name)
 
 
 def remove_label(pr, name: str):
-    existing = {l.name for l in pr.get_labels()}
+    existing = {label.name for label in pr.get_labels()}
     if name in existing:
         pr.remove_from_labels(name)
 

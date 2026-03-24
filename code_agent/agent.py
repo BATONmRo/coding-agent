@@ -1,9 +1,10 @@
 import json
-import re
 import subprocess
 from pathlib import Path
 from typing import List, Tuple
+
 from github import Github
+
 from code_agent.llm_client import yandexgpt_complete
 
 LABEL_REVIEW_REQUESTED = "ai-review-requested"
@@ -333,7 +334,7 @@ def run_issue_to_pr(
         print("PR already exists:", pr.html_url)
 
         # --- labels: после любых изменений всегда запрашиваем новое ревью ---
-    labels_now = {l.name for l in pr.get_labels()}
+    labels_now = {label.name for label in pr.get_labels()}
 
     # если были запрошены изменения — мы сделали новую попытку
     if LABEL_CHANGES_REQUESTED in labels_now:
@@ -344,7 +345,7 @@ def run_issue_to_pr(
         pr.remove_from_labels(LABEL_APPROVED)
 
     # пересчитываем после removals
-    labels_now = {l.name for l in pr.get_labels()}
+    labels_now = {label.name for label in pr.get_labels()}
     if LABEL_REVIEW_REQUESTED not in labels_now:
         pr.add_to_labels(LABEL_REVIEW_REQUESTED)
 
