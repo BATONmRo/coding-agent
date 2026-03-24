@@ -2,7 +2,7 @@ import json
 import os
 import urllib.error
 import urllib.request
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, cast
 
 OPENAI_ENDPOINT = "https://api.vsegpt.ru/v1/chat/completions"
 
@@ -15,7 +15,7 @@ def _post_json(
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             raw = resp.read().decode("utf-8")
-        return json.loads(raw)
+        return cast(Dict[str, Any], json.loads(raw))
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace")
         raise RuntimeError(f"OpenAI HTTPError {e.code}: {body}") from e
@@ -58,7 +58,7 @@ def openai_complete(
 
     resp = _post_json(OPENAI_ENDPOINT, headers, payload)
     try:
-        return resp["choices"][0]["message"]["content"]
+        return str(resp["choices"][0]["message"]["content"])
     except Exception as e:
         raise RuntimeError(f"Unexpected OpenAI response shape: {resp}") from e
 
