@@ -1,6 +1,6 @@
 import os
-from github import Github
 
+from github import Github
 
 LABEL_REVIEW_REQUESTED = "ai-review-requested"
 LABEL_CHANGES_REQUESTED = "ai-changes-requested"

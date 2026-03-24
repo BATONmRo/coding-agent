@@ -4,9 +4,7 @@ import urllib.error
 import urllib.request
 from typing import Any, Dict, Optional
 
-
 OPENAI_ENDPOINT = "https://api.vsegpt.ru/v1/chat/completions"
-
 
 def _post_json(url: str, headers: Dict[str, str], payload: Dict[str, Any], timeout: int = 60) -> Dict[str, Any]:
     data = json.dumps(payload).encode("utf-8")

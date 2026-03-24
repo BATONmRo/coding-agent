@@ -1,6 +1,5 @@
 import argparse
 import os
-import sys
 
 from code_agent.agent import run_issue_to_pr
 
