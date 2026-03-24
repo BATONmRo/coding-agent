@@ -22,7 +22,9 @@ def build_parser() -> argparse.ArgumentParser:
     run = sub.add_parser("run", help="Create/update PR for a GitHub Issue")
     run.add_argument("--issue", dest="issue_number", help="Issue number, e.g. 17")
     run.add_argument("--repo", dest="repo_name", help="owner/repo, e.g. BATONmRo/coding-agent")
-    run.add_argument("--base", dest="base_branch", default="main", help="Base branch (default: main)")
+    run.add_argument(
+        "--base", dest="base_branch", default="main", help="Base branch (default: main)"
+    )
 
     run.add_argument("--issue-title", dest="issue_title", default="", help="Issue title")
     run.add_argument("--issue-body", dest="issue_body", default="", help="Issue body")
@@ -54,12 +56,16 @@ def main(argv: list[str] | None = None) -> int:
         issue_body = args.issue_body or os.environ.get("ISSUE_BODY", "")
 
         git_token = args.git_token or os.environ.get("GITHUB_TOKEN", "")
-        api_token = args.api_token or os.environ.get("GH_API_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
+        api_token = (
+            args.api_token or os.environ.get("GH_API_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
+        )
 
         if not git_token:
             raise SystemExit("Missing git token: provide --git-token or set GITHUB_TOKEN")
         if not api_token:
-            raise SystemExit("Missing api token: provide --api-token or set GH_API_TOKEN/GITHUB_TOKEN")
+            raise SystemExit(
+                "Missing api token: provide --api-token or set GH_API_TOKEN/GITHUB_TOKEN"
+            )
 
         pr_number = args.pr_number or os.environ.get("PR_NUMBER", "")
 

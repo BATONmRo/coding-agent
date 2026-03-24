@@ -59,7 +59,7 @@ def extract_json(text: str) -> str:
         elif char == "}":
             depth -= 1
             if depth == 0:
-                return text[start:index + 1]
+                return text[start : index + 1]
 
     return ""
 
@@ -115,6 +115,7 @@ def get_ci_failures(repo, pr) -> List[Tuple[str, str]]:
             failures.append((name, details))
 
     return failures
+
 
 def run_issue_to_pr(
     *,
@@ -215,7 +216,6 @@ def run_issue_to_pr(
     changes = patch.get("changes") or []
     if not changes:
         raise RuntimeError("LLM returned no changes")
-    
 
     def contains_placeholders(s: str) -> bool:
         bad = ["...", "…", "TODO", "TBD", "<...>", "[...]"]
@@ -253,7 +253,9 @@ def run_issue_to_pr(
     BODY:
     {issue_body}
     """
-        raw3 = yandexgpt_complete(system=system, user=repair_user, temperature=0.2, max_tokens=2200).strip()
+        raw3 = yandexgpt_complete(
+            system=system, user=repair_user, temperature=0.2, max_tokens=2200
+        ).strip()
         json_text3 = extract_json(raw3)
         if not json_text3:
             raise RuntimeError("LLM retry did not return JSON")
