@@ -203,6 +203,8 @@ def run_issue_to_pr(
     - Никакого текста вне JSON.
     - Запрещено использовать заглушки: "...", "…", "TODO", "TBD", "<...>", "[...]".
     - Не меняй README.md, если задача явно не про документацию.
+    - Не изменяй файлы внутри папок code_agent/ и reviewer_agent/.
+    - Для Python-кода сразу соблюдай стиль, совместимый с ruff и black.
     - Если CI упал — приоритет исправить CI.
     """
 
@@ -289,8 +291,21 @@ def run_issue_to_pr(
         if contains_placeholders(content):
             raise RuntimeError(f"Refusing to write placeholder content for {path}")
 
+        if path.startswith("code_agent/") or path.startswith("reviewer_agent/"):
+            raise RuntimeError(f"Refusing to modify agent internals directly: {path}")
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(content, encoding="utf-8")
+
+    # --- автофикс стиля и линтера перед коммитом ---
+    try:
+        run("python -m ruff check . --fix")
+    except Exception as e:
+        print(f"ruff --fix failed: {e}")
+
+    try:
+        run("python -m black .")
+    except Exception as e:
+        print(f"black failed: {e}")
 
     run("git config user.name 'code-agent'")
     run("git config user.email 'code-agent@users.noreply.github.com'")
