@@ -46,7 +46,7 @@ def get_ci_status(repo, pr):
     """
     commits = list(pr.get_commits())
     if not commits:
-        return False, ["Нет коммитов в PR — CI проверить невозможно."]
+        return "missing", ["Нет коммитов в PR — CI проверить невозможно."]
 
     last_sha = commits[-1].sha
     commit = repo.get_commit(last_sha)
@@ -54,17 +54,20 @@ def get_ci_status(repo, pr):
     combined = commit.get_combined_status()
     state = getattr(combined, "state", None) or combined.raw_data.get("state")
 
-    # success / failure / pending / error
-    if state != "success":
-        details = [f"combined status: {state}"]
-        for s in combined.statuses:
-            st = getattr(s, "state", None) or s.raw_data.get("state")
-            if st != "success":
-                ctx = getattr(s, "context", None) or s.raw_data.get("context") or "unknown"
-                details.append(f"{ctx}: {st}")
-        return False, details
+    if state == "success":
+        return "success", []
 
-    return True, []
+    if state == "pending":
+        return "pending", ["CI ещё выполняется."]
+
+    details = [f"combined status: {state}"]
+    for s in combined.statuses:
+        st = getattr(s, "state", None) or s.raw_data.get("state")
+        if st != "success":
+            ctx = getattr(s, "context", None) or s.raw_data.get("context") or "unknown"
+            details.append(f"{ctx}: {st}")
+
+    return "failed", details
 
 
 def main():
@@ -85,7 +88,7 @@ def main():
     pr_body = pr.body or ""
 
     # 0) CI обязателен: если CI не зелёный — changes
-    ci_green, ci_details = get_ci_status(repo, pr)
+    ci_state, ci_details = get_ci_status(repo, pr)
 
     notes = []
     verdict = "changes"
@@ -93,29 +96,28 @@ def main():
     # 1) Если PR пустой — changes
     if len(files) == 0:
         verdict = "changes"
-        notes.append(
-            "В PR нет изменённых файлов. Похоже, агент ничего не сделал — нужны изменения в коде."
-        )
+        notes.append("В PR нет изменённых файлов. Похоже, агент ничего не сделал — нужны изменения в коде.")
 
-    # 2) Если CI не зелёный — changes (даже если есть summary)
-    elif not ci_green:
+    # 2) Если CI ещё выполняется — ничего не делаем, ждём следующий запуск
+    elif ci_state == "pending":
+        print(f"Reviewer postponed: CI still pending for PR {pr.html_url}")
+        return
+
+    # 3) Если CI неуспешный — changes requested
+    elif ci_state != "success":
         verdict = "changes"
         notes.append("CI не зелёный — сначала нужно починить проверки.")
         for d in ci_details:
             notes.append(f"CI fail: {d}")
 
-    # 3) CI зелёный: проверяем наличие summary/how-to-verify
+    # 4) CI зелёный: проверяем PR body
     else:
         if pr_body_has_sections(pr_body):
             verdict = "approved"
-            notes.append(
-                "CI зелёный и в PR body есть секции `Agent summary` и `How to verify` — можно принимать."
-            )
+            notes.append("CI зелёный и в PR body есть секции `Agent summary` и `How to verify` — можно принимать.")
         else:
             verdict = "changes"
-            notes.append(
-                "CI зелёный, но не вижу в PR body секции `Agent summary` и `How to verify`."
-            )
+            notes.append("CI зелёный, но не вижу в PR body секции `Agent summary` и `How to verify`.")
             notes.append("Добавь краткое описание: что сделано и как проверить (в PR description).")
 
     # Пишем комментарий в PR
