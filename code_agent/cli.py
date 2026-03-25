@@ -50,7 +50,9 @@ def main(argv: list[str] | None = None) -> int:
         issue_title = args.issue_title or os.environ.get("ISSUE_TITLE", "")
         issue_body = args.issue_body or os.environ.get("ISSUE_BODY", "")
 
-        api_token = args.api_token or os.environ.get("GH_API_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
+        api_token = (
+            args.api_token or os.environ.get("GH_API_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
+        )
 
         if not api_token:
             raise SystemExit(
