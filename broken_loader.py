@@ -1,6 +1,6 @@
 import json
-from typing import Dict, List, cast
+from typing import Any, Dict, List, cast
 
 
-def load_data() -> List[Dict]:
-    return cast(List[Dict], json.loads("[]"))
+def load_data() -> List[Dict[str, Any]]:
+    return cast(List[Dict[str, Any]], json.loads("[]"))
