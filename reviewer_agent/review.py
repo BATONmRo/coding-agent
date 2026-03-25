@@ -143,9 +143,17 @@ def main():
     if verdict == "approved":
         remove_label(pr, LABEL_CHANGES_REQUESTED)
         add_label(pr, LABEL_APPROVED)
+        pr.create_review(
+            body="AI Reviewer: CI is green and the PR body contains the required sections.",
+            event="APPROVE",
+        )
     else:
         remove_label(pr, LABEL_APPROVED)
         add_label(pr, LABEL_CHANGES_REQUESTED)
+        pr.create_review(
+            body="AI Reviewer: changes are required. See the reviewer report comment for details.",
+            event="REQUEST_CHANGES",
+        )
 
     print(f"Reviewer finished: verdict={verdict} PR={pr.html_url}")
 
