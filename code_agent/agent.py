@@ -121,7 +121,6 @@ def run_issue_to_pr(
     *,
     issue_number: str,
     repo_name: str,
-    git_token: str,
     api_token: str,
     base_branch: str = "main",
     issue_title: str = "",

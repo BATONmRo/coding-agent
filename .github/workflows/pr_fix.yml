@@ -17,6 +17,7 @@ jobs:
       - name: Checkout PR branch
         uses: actions/checkout@v4
         with:
+          token: ${{ secrets.GH_PAT }}
           fetch-depth: 0
           ref: ${{ github.event.pull_request.head.ref }}
 
@@ -32,20 +33,15 @@ jobs:
 
       - name: Run Code Agent (iteration)
         env:
-          # На итерации PR_NUMBER — главный идентификатор
           PR_NUMBER: ${{ github.event.pull_request.number }}
-
-          # Можно оставить ISSUE_NUMBER для совместимости, но лучше число
           ISSUE_NUMBER: ${{ github.event.pull_request.number }}
-
           ISSUE_TITLE: ${{ github.event.pull_request.title }}
           ISSUE_BODY: ${{ github.event.pull_request.body }}
 
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_API_TOKEN: ${{ secrets.GH_PAT }}
-          YANDEX_IAM_TOKEN: ${{ secrets.YANDEX_IAM_TOKEN }}
-          YANDEX_FOLDER_ID: ${{ secrets.YANDEX_FOLDER_ID }}
-          YANDEX_MODEL: yandexgpt-lite
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: openai/gpt-4o-mini
           GITHUB_REPOSITORY: ${{ github.repository }}
         run: |
           python -u -m code_agent.cli run --pr "${PR_NUMBER}"
