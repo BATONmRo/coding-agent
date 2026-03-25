@@ -32,11 +32,6 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--pr", dest="pr_number", help="Pull request number for iteration mode")
 
     run.add_argument(
-        "--git-token",
-        dest="git_token",
-        help="Token used for git operations (fallback env: GITHUB_TOKEN)",
-    )
-    run.add_argument(
         "--api-token",
         dest="api_token",
         help="Token used for GitHub API (fallback env: GH_API_TOKEN then GITHUB_TOKEN)",
@@ -55,13 +50,8 @@ def main(argv: list[str] | None = None) -> int:
         issue_title = args.issue_title or os.environ.get("ISSUE_TITLE", "")
         issue_body = args.issue_body or os.environ.get("ISSUE_BODY", "")
 
-        git_token = args.git_token or os.environ.get("GITHUB_TOKEN", "")
-        api_token = (
-            args.api_token or os.environ.get("GH_API_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
-        )
+        api_token = args.api_token or os.environ.get("GH_API_TOKEN") or os.environ.get("GITHUB_TOKEN", "")
 
-        if not git_token:
-            raise SystemExit("Missing git token: provide --git-token or set GITHUB_TOKEN")
         if not api_token:
             raise SystemExit(
                 "Missing api token: provide --api-token or set GH_API_TOKEN/GITHUB_TOKEN"
@@ -72,7 +62,6 @@ def main(argv: list[str] | None = None) -> int:
         run_issue_to_pr(
             issue_number=issue_number,
             repo_name=repo_name,
-            git_token=git_token,
             api_token=api_token,
             base_branch=base_branch,
             issue_title=issue_title,
