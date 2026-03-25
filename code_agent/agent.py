@@ -151,10 +151,15 @@ def run_issue_to_pr(
         issue_title = issue_title or pr.title or ""
         issue_body = issue_body or (pr.body or "")
 
-    # checkout нужной ветки
-    run(f"git checkout {base_branch}")
-    run(f"git pull origin {base_branch}")
-    run(f"git checkout -B {branch}")
+        # checkout нужной ветки
+    if pr is not None:
+        run(f"git fetch origin {branch}")
+        run(f"git checkout {branch} || git checkout -b {branch} origin/{branch}")
+        run(f"git pull --rebase origin {branch}")
+    else:
+        run(f"git checkout {base_branch}")
+        run(f"git pull origin {base_branch}")
+        run(f"git checkout -B {branch}")
 
     reviewer_comment = ""
     ci_failures = []
