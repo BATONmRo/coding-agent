@@ -1,10 +1,8 @@
 name: PR Review
 
 on:
-  pull_request:
-    types: [opened, synchronize, reopened]
   pull_request_target:
-    types: [labeled]
+    types: [opened, synchronize, reopened, labeled]
 
 permissions:
   contents: read
@@ -14,8 +12,8 @@ jobs:
   ai-review:
     runs-on: ubuntu-latest
     if: |
-      github.event_name == 'pull_request' ||
-      (github.event_name == 'pull_request_target' && github.event.label.name == 'ai-review-requested')
+      github.event.action != 'labeled' ||
+      github.event.label.name == 'ai-review-requested'
 
     steps:
       - name: Checkout repo
