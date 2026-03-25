@@ -96,7 +96,9 @@ def main():
     # 1) Если PR пустой — changes
     if len(files) == 0:
         verdict = "changes"
-        notes.append("В PR нет изменённых файлов. Похоже, агент ничего не сделал — нужны изменения в коде.")
+        notes.append(
+            "В PR нет изменённых файлов. Похоже, агент ничего не сделал — нужны изменения в коде."
+        )
 
     # 2) Если CI ещё выполняется — ничего не делаем, ждём следующий запуск
     elif ci_state == "pending":
@@ -114,10 +116,14 @@ def main():
     else:
         if pr_body_has_sections(pr_body):
             verdict = "approved"
-            notes.append("CI зелёный и в PR body есть секции `Agent summary` и `How to verify` — можно принимать.")
+            notes.append(
+                "CI зелёный и в PR body есть секции `Agent summary` и `How to verify` — можно принимать."
+            )
         else:
             verdict = "changes"
-            notes.append("CI зелёный, но не вижу в PR body секции `Agent summary` и `How to verify`.")
+            notes.append(
+                "CI зелёный, но не вижу в PR body секции `Agent summary` и `How to verify`."
+            )
             notes.append("Добавь краткое описание: что сделано и как проверить (в PR description).")
 
     # Пишем комментарий в PR
